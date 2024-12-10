@@ -1,6 +1,4 @@
 import streamlit as st
-import PyPDF2
-import docx
 import torch
 from transformers import GPTNeoForCausalLM, GPT2Tokenizer
 
@@ -43,38 +41,45 @@ def generate_text(prompt, max_length=150):
 
 
 # Streamlit Interface with Context Management
-st.title("Simple AI Chatbot Interface")
+st.title("AI Chatbot")
 
-# Initialize chat history in session state
+# Initialize chat history in session state if it's not already initialized
 if "history" not in st.session_state:
     st.session_state.history = []
 
-# Function to display full conversation history for transparency
+# Function to display the full chat history in a user-readable format
 def display_chat():
     for chat in st.session_state.history:
-        # Display user input
-        st.markdown(f"**You:** {chat['user']}")
-        # Display AI's response
-        st.markdown(f"**AI:** {chat['ai']}")
+        # Ensure each chat is a dictionary with user and ai keys before displaying
+        if isinstance(chat, dict):
+            st.markdown(f"**You:** {chat['user']}")
+            st.markdown(f"**AI:** {chat['ai']}")
+
 
 # Input box for user message
 user_input = st.text_input("Type your message:", key="user_input")
 
 if user_input:
-    # Generate AI response
-    with st.spinner("Generating AI response..."):
+    try:
         # Combine recent context into a prompt
-        context = "\n".join([f"You: {c['user']}\nAI: {c['ai']}" for c in st.session_state.history[-6:]])
+        context = "\n".join(
+            [f"You: {c['user']}\nAI: {c['ai']}" for c in st.session_state.history[-6:] if isinstance(c, dict)]
+        )
         prompt = f"{context}\nYou: {user_input}\nAI:"
-        ai_response = generate_text(prompt, max_length=150)
+        
+        # Generate AI response
+        with st.spinner("Generating AI response..."):
+            ai_response = generate_text(prompt, max_length=150)
 
-        # Append user input and AI response to history for context tracking
+        # Append user input and AI response to history safely
         st.session_state.history.append({"user": user_input, "ai": ai_response})
 
-    # Redisplay chat history
-    st.write("### Full Conversation")
-    display_chat()
+        # Redisplay the conversation history
+        st.write("### Full Conversation")
+        display_chat()
+    except Exception as e:
+        st.error(f"An error occurred: {str(e)}")
 else:
-    # If no user input yet, just show context display
+    # If no user input yet, show context only
     st.write("### Full Conversation")
     display_chat()
