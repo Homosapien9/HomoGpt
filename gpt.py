@@ -18,7 +18,7 @@ model, tokenizer, device = load_gpt_neo()
 # Generate AI response with enhanced logic
 def generate_text(user_input, max_length=150):
     """
-    Generates an AI response based on user input with strict relevance and clarity.
+    Generates an AI response based on user input with stricter control and clarity.
     """
     # Include only the last 3 interactions for context
     context_window = 3
@@ -28,7 +28,7 @@ def generate_text(user_input, max_length=150):
 
     # Define a clear, concise prompt
     prompt = (
-        "You are a helpful and knowledgeable assistant. Answer user queries with concise and relevant information.\n\n"
+        "You are a polite, helpful, and concise assistant. Respond in a natural and human-like manner.\n\n"
         f"{conversation_context}\nUser: {user_input}\nAI:"
     )
 
@@ -36,15 +36,20 @@ def generate_text(user_input, max_length=150):
     inputs = tokenizer(prompt, return_tensors="pt", truncation=True)
     input_ids = inputs["input_ids"].to(device)
 
+    # Handle deterministic greetings
+    greetings = ["good morning", "good afternoon", "good evening"]
+    if user_input.lower().strip() in greetings:
+        return f"Good {user_input.split()[1]}! How can I help you today?"
+
     # Generate response with controlled parameters
     outputs = model.generate(
         input_ids,
         max_length=max_length + len(input_ids[0]),
         num_return_sequences=1,
         no_repeat_ngram_size=2,
-        temperature=0.5,  # Lower temperature for focused responses
-        top_k=40,  # Limits token selection to top 40 options
-        top_p=0.8,  # Ensures nucleus sampling for balanced output
+        temperature=0.4,  # Lower temperature for deterministic responses
+        top_k=40,
+        top_p=0.85,
         pad_token_id=tokenizer.pad_token_id
     )
 
@@ -59,7 +64,7 @@ def generate_text(user_input, max_length=150):
 
 # Streamlit UI
 st.title("Advanced AI Chatbot")
-st.markdown("Chat with a highly responsive and intelligent assistant.")
+st.markdown("Chat with a responsive and intelligent assistant.")
 
 # Initialize session state for chat history
 if "history" not in st.session_state:
