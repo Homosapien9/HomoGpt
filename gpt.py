@@ -1,6 +1,7 @@
 import streamlit as st
 import PyPDF2
 import docx
+import torch
 from transformers import GPTNeoForCausalLM, GPT2Tokenizer
 from pptx import Presentation
 from pptx.util import Inches
