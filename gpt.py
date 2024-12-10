@@ -70,7 +70,7 @@ user_input = st.text_input("Type your message:", key="user_input", placeholder="
 
 if user_input:
     # Construct the prompt
-    prompt = f"You are a helpful assistant. Answer the following question:\n:User  {user_input}\nAI:"
+    prompt = f"\n:User  {user_input}\nAI:"
 
     with st.spinner("Generating AI response..."):
         ai_response = generate_text(prompt)  # Generate the AI response
