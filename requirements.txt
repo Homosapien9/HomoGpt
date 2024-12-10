@@ -8,3 +8,10 @@ torchaudio
 python-pptx
 requests
 Pillow
+re
+json
+datetime
+random
+nltk
+pandas
+numpy
