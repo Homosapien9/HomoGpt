@@ -1,188 +1,193 @@
 import streamlit as st
 import torch
-from transformers import GPTNeoForCausalLM, GPT2Tokenizer
+from transformers import GPTJForCausalLM, GPT2Tokenizer
+import wikipedia
 import re
-import random
-import time
-import json
-from datetime import datetime
+import nltk
+from nltk.sentiment import SentimentIntensityAnalyzer
+from nltk.tokenize import word_tokenize
+import torch.nn as nn
 
-# Load GPT-Neo model and tokenizer
+# Download NLTK resources
+nltk.download('vader_lexicon')
+nltk.download('punkt')
+
+# Load GPT-J model and tokenizer
 @st.cache_resource
-def load_gpt_neo():
-    model_name = "EleutherAI/gpt-neo-125M"  # Model can be changed to larger if needed
+def load_gpt_j():
+    model_name = "EleutherAI/gpt-j-6B"  # GPT-J 6B model
     tokenizer = GPT2Tokenizer.from_pretrained(model_name)
     tokenizer.pad_token = tokenizer.eos_token  # Handle padding token
-    model = GPTNeoForCausalLM.from_pretrained(model_name)
+    model = GPTJForCausalLM.from_pretrained(model_name)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model.to(device)
     return model, tokenizer, device
 
-model, tokenizer, device = load_gpt_neo()
+model, tokenizer, device = load_gpt_j()
 
-# Define helper functions for preprocessing and text manipulation
-def clean_input(user_input):
-    """Clean user input by removing special characters and excessive spaces."""
-    user_input = re.sub(r'[^\w\s]', '', user_input)
-    return user_input.strip()
+# LSTM Model for Sentence Classification (example: Sentiment Analysis)
+class LSTMModel(nn.Module):
+    def __init__(self, input_size, hidden_size, num_classes):
+        super(LSTMModel, self).__init__()
+        self.embedding = nn.Embedding(input_size, hidden_size)
+        self.lstm = nn.LSTM(hidden_size, hidden_size, batch_first=True)
+        self.fc = nn.Linear(hidden_size, num_classes)
 
-def is_greeting(user_input):
-    """Detect if the user is greeting the chatbot."""
-    greetings = ["good morning", "good afternoon", "good evening", "hey", "hello", "hi", "howdy"]
-    return any(greeting in user_input.lower() for greeting in greetings)
+    def forward(self, x):
+        x = self.embedding(x)
+        lstm_out, _ = self.lstm(x)
+        out = self.fc(lstm_out[:, -1, :])
+        return out
 
-def save_interaction_to_log(user_input, ai_response):
-    """Log the user interaction with a timestamp."""
-    with open("interaction_log.txt", "a") as f:
-        f.write(f"{datetime.now()} - User: {user_input} | AI: {ai_response}\n")
-
-def save_preferences(preferences):
-    """Save user preferences to a JSON file."""
-    with open("user_preferences.json", "w") as f:
-        json.dump(preferences, f)
-
-def load_preferences():
-    """Load user preferences from a JSON file."""
+# Function to fetch Wikipedia data
+def get_wikipedia_info(query):
     try:
-        with open("user_preferences.json", "r") as f:
-            preferences = json.load(f)
-    except FileNotFoundError:
-        preferences = {}
-    return preferences
+        # Fetch the summary of the query from Wikipedia
+        summary = wikipedia.summary(query, sentences=3)
+        return summary
+    except wikipedia.exceptions.DisambiguationError as e:
+        # In case of ambiguity, return a list of possible options
+        return f"There are multiple topics for '{query}'. You can be more specific."
 
-# Function to generate AI response
-def generate_text(user_input, max_length=200):
-    """Generate AI responses with a context-aware prompt."""
-    clean_user_input = clean_input(user_input)
-    
-    # Check if input is a greeting
-    if is_greeting(clean_user_input):
-        return random.choice([
-            "Hello! How can I assist you today?",
-            "Good day! How can I help?",
-            "Hi there! What can I do for you?",
-            "Greetings! What would you like to discuss?"
-        ])
-    
-    # Build conversation context
+# Sentiment Analysis using NLTK
+def analyze_sentiment(text):
+    sia = SentimentIntensityAnalyzer()
+    sentiment_score = sia.polarity_scores(text)
+    return sentiment_score
+
+# Function to preprocess text using NLTK
+def preprocess_text(text):
+    tokens = word_tokenize(text)
+    return tokens
+
+# Function to generate AI response based on user input
+def generate_text(user_input, max_length=150, fetch_wiki=False):
     conversation_context = "\n".join(
-        [f"User: {msg['user']}\nAI: {msg['ai']}" for msg in st.session_state.history[-5:]]
+        [f"User: {msg['user']}\nAI: {msg['ai']}" for msg in st.session_state.history]
     )
     
-    prompt = (
-        "You are a friendly, intelligent, and informative AI assistant. Respond in a manner suitable "
-        "to the conversation context. If the user asks a question, provide a detailed, informative response."
-        f"\n{conversation_context}\nUser: {clean_user_input}\nAI:"
-    )
-    
-    # Tokenize input and generate AI response
-    inputs = tokenizer(prompt, return_tensors="pt", truncation=True, padding=True)
-    input_ids = inputs["input_ids"].to(device)
+    if fetch_wiki:
+        # If the user query is asking for factual data, get Wikipedia info
+        wiki_info = get_wikipedia_info(user_input)
+        prompt = f"{conversation_context}\nUser: {user_input}\nAI (with Wikipedia info): {wiki_info}\nAI:"
+    else:
+        # Otherwise, generate the response based on context alone
+        prompt = f"{conversation_context}\nUser: {user_input}\nAI:"
 
-    # Generate AI output
+    # Tokenize input
+    inputs = tokenizer(prompt, return_tensors="pt", padding=True, truncation=True)
+    input_ids = inputs["input_ids"].to(device)
+    attention_mask = inputs["attention_mask"].to(device)
+
+    # Generate output
     outputs = model.generate(
         input_ids,
-        max_length=max_length + len(input_ids[0]),
+        attention_mask=attention_mask,
+        max_length=max_length + len(input_ids[0]),  # Adjust max length
         num_return_sequences=1,
-        no_repeat_ngram_size=2,
-        temperature=0.7,
+        no_repeat_ngram_size=2,  # Avoid repetitive n-grams
+        temperature=0.7,  # Creativity control
         top_k=50,
-        top_p=0.95,
-        pad_token_id=tokenizer.pad_token_id,
-        do_sample=True
+        top_p=0.9,
+        pad_token_id=tokenizer.pad_token_id
     )
-    
+
+    # Decode output
     generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+
+    # Extract AI response (after "AI:")
     response_start = generated_text.find("AI:") + len("AI:")
-    response = generated_text[response_start:].strip()
+    return generated_text[response_start:].strip()
 
-    # Log the interaction
-    save_interaction_to_log(user_input, response)
-    
-    return response
+# Function to generate Python code from a query
+def generate_python_code(query):
+    prompt = f"Write a Python script for the following task:\n{query}\nPython code:"
+    inputs = tokenizer(prompt, return_tensors="pt", padding=True, truncation=True)
+    input_ids = inputs["input_ids"].to(device)
+    attention_mask = inputs["attention_mask"].to(device)
 
-# Initialize Streamlit state
+    # Generate code output
+    outputs = model.generate(
+        input_ids,
+        attention_mask=attention_mask,
+        max_length=200,
+        num_return_sequences=1,
+        no_repeat_ngram_size=2,  # Avoid repetitive n-grams
+        temperature=0.7,  # Creativity control
+        top_k=50,
+        top_p=0.9,
+        pad_token_id=tokenizer.pad_token_id
+    )
+
+    generated_code = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    return generated_code
+
+# Function to improve or refactor Python code
+def improve_python_code(given_code):
+    prompt = f"Improve the following Python code:\n{given_code}\nImproved Python code:"
+    inputs = tokenizer(prompt, return_tensors="pt", padding=True, truncation=True)
+    input_ids = inputs["input_ids"].to(device)
+    attention_mask = inputs["attention_mask"].to(device)
+
+    # Generate refactored code output
+    outputs = model.generate(
+        input_ids,
+        attention_mask=attention_mask,
+        max_length=300,
+        num_return_sequences=1,
+        no_repeat_ngram_size=2,  # Avoid repetitive n-grams
+        temperature=0.7,  # Creativity control
+        top_k=50,
+        top_p=0.9,
+        pad_token_id=tokenizer.pad_token_id
+    )
+
+    improved_code = tokenizer.decode(outputs[0], skip_special_tokens=True)
+    return improved_code
+
+# Streamlit Interface
+st.title("Advanced GPT-J AI Chatbot with Python Code Generation")
+
+# Initialize conversation history
 if "history" not in st.session_state:
     st.session_state.history = []
 
-# Load user preferences from file (if available)
-user_preferences = load_preferences()
+# User input
+user_input = st.text_input("Your message:", placeholder="Ask me anything...")
 
-# Streamlit UI setup
-st.title("Advanced AI Chatbot")
-st.markdown("""
-This is an advanced AI chatbot that provides detailed responses, personalizes conversation, 
-and allows dynamic adjustments to the tone, topic, and style of interaction.
-""")
+# Option to enable Wikipedia-based response or code generation
+fetch_wiki_info = st.checkbox("Fetch Wikipedia info (for factual queries)")
+generate_code = st.checkbox("Generate Python Code (for code queries)")
+improve_code = st.checkbox("Improve Given Python Code (paste code below)")
 
-# User preferences for customization
-if st.checkbox("Enable Custom Tone"):
-    tone_option = st.selectbox("Choose the tone for responses:", ["Friendly", "Professional", "Casual", "Empathetic"])
-    user_preferences["tone"] = tone_option
-    save_preferences(user_preferences)
+# If user asks for Python code improvement
+given_code = st.text_area("Paste code to improve:", height=200)
 
-if st.checkbox("Enable Topic Focus"):
-    topic_option = st.selectbox("Choose a topic:", ["Science", "Technology", "History", "Music", "General Knowledge"])
-    user_preferences["topic"] = topic_option
-    save_preferences(user_preferences)
-
-# Input box for user to type messages
-with st.form(key="chat_form"):
-    user_input = st.text_input("Your message:", placeholder="Ask me anything...")
-    submit_button = st.form_submit_button(label="Send")
-
-# Process and respond to user input
-if submit_button and user_input:
+# Sentiment analysis and text preprocessing
+if user_input:
+    sentiment = analyze_sentiment(user_input)  # Sentiment analysis
+    tokens = preprocess_text(user_input)  # Tokenizing the text
+    
     with st.spinner("Generating response..."):
-        ai_response = generate_text(user_input)  # Get AI response
-        st.session_state.history.append({"user": user_input, "ai": ai_response})  # Save to history
+        if generate_code:
+            # Generate Python code based on the user's query
+            ai_response = generate_python_code(user_input)
+        elif improve_code and given_code:
+            # Improve or refactor the given code
+            ai_response = improve_python_code(given_code)
+        else:
+            # Regular response with or without Wikipedia info
+            ai_response = generate_text(user_input, fetch_wiki=fetch_wiki_info)
 
-# Display conversation history
+        st.session_state.history.append({"user": user_input, "ai": ai_response})
+
+# Display chat history
 if st.session_state.history:
     for chat in st.session_state.history:
-        st.markdown(f"**User:** {chat['user']}")
-        st.markdown(f"**AI:** {chat['ai']}")
+        st.markdown(f"<div class='chat-container user-message'><strong>You:</strong> {chat['user']}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='chat-container ai-message'><strong>AI:</strong> {chat['ai']}</div>", unsafe_allow_html=True)
 
-# Button to clear chat history
-if st.button("Clear Chat History"):
+# Clear chat history
+if st.button("Clear Chat"):
     st.session_state.history = []
 
-# Feedback and suggestions section
-st.markdown("""
-### Suggestions for improving the chatbot:
-- You can switch topics at any time.
-- Use the "Enable Custom Tone" checkbox to change how the AI responds.
-- Feel free to ask for more detailed answers or summaries.
-""")
-
-# Saving preferences, interaction log, and other settings
-if st.button("Save Preferences"):
-    save_preferences(user_preferences)
-    st.success("Your preferences have been saved successfully.")
-
-# Adding multi-turn conversation handling with advanced user input analysis
-def analyze_input(user_input):
-    """Analyze user input to detect intent, entities, and possible topics."""
-    # Example of detecting if the user asks for a recommendation
-    if "recommend" in user_input.lower():
-        return "recommendation", None
-    
-    # Check if user asks for help with a specific topic
-    if "help" in user_input.lower():
-        return "help", "Please specify a topic"
-    
-    return "general", "I'm here to chat about anything!"
-
-# Detect user intent and respond accordingly
-def handle_advanced_input(user_input):
-    intent, message = analyze_input(user_input)
-    if intent == "recommendation":
-        return "I recommend reading some books or exploring online resources related to your topic."
-    elif intent == "help":
-        return message
-    return "How can I assist you further?"
-
-# Enhance response customization
-if user_input:
-    advanced_response = handle_advanced_input(user_input)
-    st.markdown(f"**AI (Advanced Handling):** {advanced_response}")
