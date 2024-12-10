@@ -1,12 +1,6 @@
 streamlit
 transformers
 torch
-torchvision
-torchaudio
-re
-json
-datetime
-random
 nltk
 pandas
 numpy
