@@ -16,7 +16,7 @@ def load_gpt_neo():
 model, tokenizer, device = load_gpt_neo()
 
 # Function to generate responses based on context
-def generate_text(prompt, max_length=150):  # Increased max_length for better responses
+def generate_text(prompt, max_length=500):  # Set max_length to 500
     inputs = tokenizer(prompt, return_tensors="pt", padding=True, truncation=True)
     input_ids = inputs["input_ids"].to(device)
     attention_mask = inputs["attention_mask"].to(device)
@@ -27,9 +27,9 @@ def generate_text(prompt, max_length=150):  # Increased max_length for better re
         max_length=max_length,
         num_return_sequences=1,
         no_repeat_ngram_size=2,
-        temperature=0.9,  # Slightly increased temperature for more creativity
-        top_k=50,  # Top-k sampling for better diversity
-        top_p=0.95,  # Nucleus sampling
+        temperature=0.9,
+        top_k=50,
+        top_p=0.95,
         pad_token_id=tokenizer.pad_token_id
     )
 
@@ -54,20 +54,23 @@ def display_chat():
 # User input for message
 user_input = st.text_input("Type your message:", key="user_input", placeholder="Enter your message here...")
 
-# User input for max response length
-max_length = st.slider("Select max response length:", min_value=50, max_value=300, value=150)
-
 if user_input:
     try:
         # Combine recent context into a prompt, limiting to the last 4 exchanges
         context = "\n".join(
             [f"You: {c['user']}\nAI: {c['ai']}" for c in st.session_state.history[-4:] if isinstance(c, dict)]
         )
-        prompt = f"{context}\nYou: {user_input}\nAI:"
         
-        with st.spinner("Generating AI response..."):
-            ai_response = generate_text(prompt, max_length=max_length)
+        # Construct the prompt with a clear instruction
+        prompt = f"{context}\nYou: {user_input}\nAI:"
 
+        with st.spinner("Generating AI response..."):
+            ai_response = generate_text(prompt)  # Use the default max_length of 500
+
+        # Clean up the response to avoid repetition
+        ai_response = ai_response.replace("You:", "").replace("AI:", "").strip()
+
+        # Append the user input and AI response to the history
         st.session_state.history.append({"user": user_input, "ai": ai_response})
 
         st.write("### Full Conversation")
