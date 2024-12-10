@@ -15,6 +15,11 @@ def load_gpt_neo():
 
 model, tokenizer, device = load_gpt_neo()
 
+# Function to detect greetings
+def is_greeting(user_input):
+    greetings = ["good morning", "good afternoon", "good evening", "hey", "hello", "hi"]
+    return any(greeting in user_input.lower() for greeting in greetings)
+
 # Generate AI response with enhanced logic
 def generate_text(user_input, max_length=150):
     """
@@ -32,14 +37,13 @@ def generate_text(user_input, max_length=150):
         f"{conversation_context}\nUser: {user_input}\nAI:"
     )
 
+    # If it's a greeting, respond with a greeting message
+    if is_greeting(user_input):
+        return f"Hello! How can I assist you today?"
+
     # Tokenize input
     inputs = tokenizer(prompt, return_tensors="pt", truncation=True)
     input_ids = inputs["input_ids"].to(device)
-
-    # Handle deterministic greetings
-    greetings = ["good morning", "good afternoon", "good evening"]
-    if user_input.lower().strip() in greetings:
-        return f"Good {user_input.split()[1]}! How can I help you today?"
 
     # Generate response with controlled parameters
     outputs = model.generate(
@@ -47,7 +51,7 @@ def generate_text(user_input, max_length=150):
         max_length=max_length + len(input_ids[0]),
         num_return_sequences=1,
         no_repeat_ngram_size=2,
-        temperature=0.4,  # Lower temperature for deterministic responses
+        temperature=0.5,  # Lower temperature for deterministic responses
         top_k=40,
         top_p=0.85,
         pad_token_id=tokenizer.pad_token_id
