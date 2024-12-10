@@ -1,6 +1,1 @@
-streamlit 
-python-pptx 
-PyPDF2 
-python-docx 
-transformers 
-requests
+streamlit PyPDF2 python-docx transformers torch torchvision torchaudio python-pptx requests Pillow
