@@ -42,10 +42,10 @@ st.markdown(
     """
     <style>
     .reportview-container {
-        background-color: #f0f0f5;  /* Light background for better readability */
+        background-color: #000000;
     }
     .chat-container {
-        background-color: #ffffff;  /* White background for chat messages */
+        background-color: #000000;
         border-radius: 10px;
         padding: 10px;
         margin-bottom: 10px;
@@ -70,9 +70,6 @@ if user_input:
 
     # Append the user input and AI response to the history
     st.session_state.history.append({"user": user_input, "ai": ai_response})
-
-    # Display only the AI response
-    st.markdown(f"<div class='chat-container'><strong>AI:</strong> {ai_response}</div>", unsafe_allow_html=True)
 
 # Display the chat history at the top
 if st.session_state.history:
