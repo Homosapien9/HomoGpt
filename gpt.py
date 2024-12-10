@@ -5,7 +5,7 @@ from transformers import GPTNeoForCausalLM, GPT2Tokenizer
 # Load GPT-Neo model and tokenizer
 @st.cache_resource
 def load_gpt_neo():
-    model_name = "EleutherAI/gpt-neo-125M"  # Smaller model for faster response
+    model_name = "EleutherAI/gpt-neo-125M"  # You can use a larger model if needed
     tokenizer = GPT2Tokenizer.from_pretrained(model_name)
     tokenizer.pad_token = tokenizer.eos_token
     model = GPTNeoForCausalLM.from_pretrained(model_name)
@@ -16,7 +16,7 @@ def load_gpt_neo():
 model, tokenizer, device = load_gpt_neo()
 
 # Function to generate responses based on context
-def generate_text(prompt, max_length=500):  # Set max_length to 500
+def generate_text(prompt, max_length=150):  # Set max_length to 150 for concise responses
     inputs = tokenizer(prompt, return_tensors="pt", padding=True, truncation=True)
     input_ids = inputs["input_ids"].to(device)
     attention_mask = inputs["attention_mask"].to(device)
@@ -27,56 +27,59 @@ def generate_text(prompt, max_length=500):  # Set max_length to 500
         max_length=max_length,
         num_return_sequences=1,
         no_repeat_ngram_size=2,
-        temperature=0.9,
+        temperature=0.7,  # Lower temperature for more focused responses
         top_k=50,
-        top_p=0.95,
+        top_p=0.9,
         pad_token_id=tokenizer.pad_token_id
     )
 
     generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
-    return generated_text
+    return generated_text.strip()
 
-# Streamlit Interface with Context Management
-st.title("AI Chatbot Interface")
-st.markdown("<style>body {background-color: #f0f2f5;}</style>", unsafe_allow_html=True)
+# Streamlit Interface
+st.title("General GPT Chatbot")
+st.markdown(
+    """
+    <style>
+    .reportview-container {
+        background-color: #f0f0f5;  /* Light background for better readability */
+    }
+    .chat-container {
+        background-color: #ffffff;  /* White background for chat messages */
+        border-radius: 10px;
+        padding: 10px;
+        margin-bottom: 10px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
 if "history" not in st.session_state:
     st.session_state.history = []
 
+# Display the chat history
 def display_chat():
-    for chat in st.session_state.history:
-        if isinstance(chat, dict):
-            st.markdown(f"<div style='background-color: #e1ffc7; border-radius: 10px; padding: 10px; margin: 5px 0;'>"
-                         f"<strong>You:</strong> {chat['user']}</div>", unsafe_allow_html=True)
-            st.markdown(f"<div style='background-color: #d1e7ff; border-radius: 10px; padding: 10px; margin: 5px 0;'>"
-                         f"<strong>AI:</strong> {chat['ai']}</div>", unsafe_allow_html=True)
+    if st.session_state.history:
+        last_chat = st.session_state.history[-1]  # Get the last chat
+        st.markdown(f"<div class='chat-container'><strong>You:</strong> {last_chat['user']}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='chat-container'><strong>AI:</strong> {last_chat['ai']}</div>", unsafe_allow_html=True)
 
 # User input for message
 user_input = st.text_input("Type your message:", key="user_input", placeholder="Enter your message here...")
 
 if user_input:
-    try:
-        # Combine recent context into a prompt, limiting to the last 4 exchanges
-        context = "\n".join(
-            [f"You: {c['user']}\nAI: {c['ai']}" for c in st.session_state.history[-4:] if isinstance(c, dict)]
-        )
-        
-        # Construct the prompt with a clear instruction
-        prompt = f"{context}\nYou: {user_input}\nAI:"
+    # Construct the prompt
+    prompt = f"You are a helpful assistant. Answer the following question:\n:User  {user_input}\nAI:"
 
-        with st.spinner("Generating AI response..."):
-            ai_response = generate_text(prompt)  # Use the default max_length of 500
+    with st.spinner("Generating AI response..."):
+        ai_response = generate_text(prompt)  # Generate the AI response
 
-        # Clean up the response to avoid repetition
-        ai_response = ai_response.replace("You:", "").replace("AI:", "").strip()
+    # Append the user input and AI response to the history
+    st.session_state.history.append({"user": user_input, "ai": ai_response})
 
-        # Append the user input and AI response to the history
-        st.session_state.history.append({"user": user_input, "ai": ai_response})
-
-        st.write("### Full Conversation")
-        display_chat()
-    except Exception as e:
-        st.error(f"An error occurred: {str(e)}")
-else:
-    st.write("### Full Conversation")
+    # Display the latest query and response
     display_chat()
+
+# Display the chat history at the top
+display_chat()
