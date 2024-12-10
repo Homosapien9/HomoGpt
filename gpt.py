@@ -3,14 +3,6 @@ import torch
 from transformers import GPTJForCausalLM, GPT2Tokenizer
 import wikipedia
 import re
-import nltk
-from nltk.sentiment import SentimentIntensityAnalyzer
-from nltk.tokenize import word_tokenize
-import torch.nn as nn
-
-# Download NLTK resources
-nltk.download('vader_lexicon')
-nltk.download('punkt')
 
 # Load GPT-J model and tokenizer
 @st.cache_resource
@@ -25,20 +17,6 @@ def load_gpt_j():
 
 model, tokenizer, device = load_gpt_j()
 
-# LSTM Model for Sentence Classification (example: Sentiment Analysis)
-class LSTMModel(nn.Module):
-    def __init__(self, input_size, hidden_size, num_classes):
-        super(LSTMModel, self).__init__()
-        self.embedding = nn.Embedding(input_size, hidden_size)
-        self.lstm = nn.LSTM(hidden_size, hidden_size, batch_first=True)
-        self.fc = nn.Linear(hidden_size, num_classes)
-
-    def forward(self, x):
-        x = self.embedding(x)
-        lstm_out, _ = self.lstm(x)
-        out = self.fc(lstm_out[:, -1, :])
-        return out
-
 # Function to fetch Wikipedia data
 def get_wikipedia_info(query):
     try:
@@ -48,17 +26,6 @@ def get_wikipedia_info(query):
     except wikipedia.exceptions.DisambiguationError as e:
         # In case of ambiguity, return a list of possible options
         return f"There are multiple topics for '{query}'. You can be more specific."
-
-# Sentiment Analysis using NLTK
-def analyze_sentiment(text):
-    sia = SentimentIntensityAnalyzer()
-    sentiment_score = sia.polarity_scores(text)
-    return sentiment_score
-
-# Function to preprocess text using NLTK
-def preprocess_text(text):
-    tokens = word_tokenize(text)
-    return tokens
 
 # Function to generate AI response based on user input
 def generate_text(user_input, max_length=150, fetch_wiki=False):
@@ -163,11 +130,7 @@ improve_code = st.checkbox("Improve Given Python Code (paste code below)")
 # If user asks for Python code improvement
 given_code = st.text_area("Paste code to improve:", height=200)
 
-# Sentiment analysis and text preprocessing
 if user_input:
-    sentiment = analyze_sentiment(user_input)  # Sentiment analysis
-    tokens = preprocess_text(user_input)  # Tokenizing the text
-    
     with st.spinner("Generating response..."):
         if generate_code:
             # Generate Python code based on the user's query
@@ -190,4 +153,3 @@ if st.session_state.history:
 # Clear chat history
 if st.button("Clear Chat"):
     st.session_state.history = []
-
