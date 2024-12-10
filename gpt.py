@@ -15,11 +15,21 @@ def load_gpt_neo():
 
 model, tokenizer, device = load_gpt_neo()
 
-# Function to generate responses based on context
-def generate_text(user_input, max_length=500):
+# Function to generate responses based on context and advanced prompt engineering
+def generate_text(user_input, max_length=150):
     # Maintain context for better responses
     context = "\n".join([f":User  {msg['user']}\nAI: {msg['ai']}" for msg in st.session_state.history])
-    prompt = f"{context}\n:User  {user_input}\nAI:"
+    
+    # Advanced prompt engineering
+    prompt = (
+        "You are a helpful assistant that provides detailed and informative responses.\n"
+        "Always clarify your answers and provide examples when necessary.\n"
+        "If the user asks for code, provide well-structured code snippets with comments.\n"
+        "If the user asks for explanations, break down complex concepts into simpler parts.\n"
+        f"{context}\n"
+        f":User  {user_input}\n"
+        "AI:"
+    )
 
     inputs = tokenizer(prompt, return_tensors="pt", padding=True, truncation=True)
     input_ids = inputs["input_ids"].to(device)
@@ -31,7 +41,7 @@ def generate_text(user_input, max_length=500):
         max_length=max_length + len(input_ids[0]),  # Adjust max_length based on input length
         num_return_sequences=1,
         no_repeat_ngram_size=2,
-        temperature=0.5,  # Adjusted for more focused responses
+        temperature=0.7,  # Adjusted for more creative responses
         top_k=50,
         top_p=0.9,
         pad_token_id=tokenizer.pad_token_id
@@ -41,19 +51,27 @@ def generate_text(user_input, max_length=500):
     return generated_text.strip()
 
 # Streamlit Interface
-st.title("HomoGpt")
+st.title("Advanced AI Chatbot")
 st.markdown(
     """
     <style>
     .reportview-container {
-        background-color: #000000;
+        background-color: #f0f0f0;
     }
     .chat-container {
-        background-color: #000000;
+        background-color: #ffffff;
         border-radius: 10px;
         padding: 10px;
         margin-bottom: 10px;
-        color: white;
+        box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+    .user-message {
+        background-color: #d1e7dd;
+        border-left: 5px solid #0d6efd;
+    }
+    .ai-message {
+        background-color: #e2e3e5;
+        border-left: 5px solid #6c757d;
     }
     </style>
     """,
@@ -76,5 +94,9 @@ if user_input:
 # Display the chat history at the top
 if st.session_state.history:
     for chat in st.session_state.history:
-        st.markdown(f"<div class='chat-container'><strong>You:</strong> {chat['user']}</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='chat-container'><strong>AI:</strong> {chat['ai']}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='chat-container user-message'><strong>You:</strong> {chat['user']}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='chat-container ai-message'><strong>AI:</strong> {chat['ai']}</div>", unsafe_allow_html=True)
+
+# Clear button to reset the chat history
+if st.button("Clear Chat"):
+    st.session_state.history = []
