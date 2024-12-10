@@ -45,8 +45,6 @@ user_input = st.text_input("Enter your message:")
 
 if user_input:
     try:
-    # Your model or GPT code here
-    with st.spinner("Processing..."):
         result = generate_text(text, max_length=500)
         st.write(result)
     except Exception as e:
