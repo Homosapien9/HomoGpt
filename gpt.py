@@ -37,7 +37,7 @@ def generate_text(prompt, max_length=150):  # Set max_length to 150 for concise 
     return generated_text.strip()
 
 # Streamlit Interface
-st.title("Simple GPT Chatbot")
+st.title("HomoGpt")
 st.markdown(
     """
     <style>
@@ -63,7 +63,7 @@ user_input = st.text_input("Type your message:", key="user_input", placeholder="
 
 if user_input:
     # Construct the prompt
-    prompt = f"You are a helpful assistant. Answer the following question:\n{user_input}"
+    prompt = f":\n{user_input}"
 
     with st.spinner("Generating AI response..."):
         ai_response = generate_text(prompt)  # Generate the AI response
