@@ -37,15 +37,15 @@ def generate_text(prompt, max_length=150):  # Set max_length to 150 for concise 
     return generated_text.strip()
 
 # Streamlit Interface
-st.title("General GPT Chatbot")
+st.title("Simple GPT Chatbot")
 st.markdown(
     """
     <style>
     .reportview-container {
-        background-color: #000000;  /* Light background for better readability */
+        background-color: #f0f0f5;  /* Light background for better readability */
     }
     .chat-container {
-        background-color: #000000;  /* White background for chat messages */
+        background-color: #ffffff;  /* White background for chat messages */
         border-radius: 10px;
         padding: 10px;
         margin-bottom: 10px;
@@ -58,19 +58,12 @@ st.markdown(
 if "history" not in st.session_state:
     st.session_state.history = []
 
-# Display the chat history
-def display_chat():
-    if st.session_state.history:
-        last_chat = st.session_state.history[-1]  # Get the last chat
-        st.markdown(f"<div class='chat-container'><strong>You:</strong> {last_chat['user']}</div>", unsafe_allow_html=True)
-        st.markdown(f"<div class='chat-container'><strong>AI:</strong> {last_chat['ai']}</div>", unsafe_allow_html=True)
-
 # User input for message
 user_input = st.text_input("Type your message:", key="user_input", placeholder="Enter your message here...")
 
 if user_input:
     # Construct the prompt
-    prompt = f"\n:User  {user_input}\nAI:"
+    prompt = f"You are a helpful assistant. Answer the following question:\n{user_input}"
 
     with st.spinner("Generating AI response..."):
         ai_response = generate_text(prompt)  # Generate the AI response
@@ -78,8 +71,11 @@ if user_input:
     # Append the user input and AI response to the history
     st.session_state.history.append({"user": user_input, "ai": ai_response})
 
-    # Display the latest query and response
-    display_chat()
+    # Display only the AI response
+    st.markdown(f"<div class='chat-container'><strong>AI:</strong> {ai_response}</div>", unsafe_allow_html=True)
 
 # Display the chat history at the top
-display_chat()
+if st.session_state.history:
+    last_chat = st.session_state.history[-1]  # Get the last chat
+    st.markdown(f"<div class='chat-container'><strong>You:</strong> {last_chat['user']}</div>", unsafe_allow_html=True)
+    st.markdown(f"<div class='chat-container'><strong>AI:</strong> {last_chat['ai']}</div>", unsafe_allow_html=True)
