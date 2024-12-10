@@ -16,7 +16,11 @@ def load_gpt_neo():
 model, tokenizer, device = load_gpt_neo()
 
 # Function to generate responses based on context
-def generate_text(prompt, max_length=150):  # Set max_length to 150 for concise responses
+def generate_text(user_input, max_length=500):
+    # Maintain context for better responses
+    context = "\n".join([f":User  {msg['user']}\nAI: {msg['ai']}" for msg in st.session_state.history])
+    prompt = f"{context}\n:User  {user_input}\nAI:"
+
     inputs = tokenizer(prompt, return_tensors="pt", padding=True, truncation=True)
     input_ids = inputs["input_ids"].to(device)
     attention_mask = inputs["attention_mask"].to(device)
@@ -24,10 +28,10 @@ def generate_text(prompt, max_length=150):  # Set max_length to 150 for concise 
     outputs = model.generate(
         input_ids,
         attention_mask=attention_mask,
-        max_length=max_length,
+        max_length=max_length + len(input_ids[0]),  # Adjust max_length based on input length
         num_return_sequences=1,
         no_repeat_ngram_size=2,
-        temperature=0.7,  # Lower temperature for more focused responses
+        temperature=0.5,  # Adjusted for more focused responses
         top_k=50,
         top_p=0.9,
         pad_token_id=tokenizer.pad_token_id
@@ -49,6 +53,7 @@ st.markdown(
         border-radius: 10px;
         padding: 10px;
         margin-bottom: 10px;
+        color: white;
     }
     </style>
     """,
@@ -62,17 +67,14 @@ if "history" not in st.session_state:
 user_input = st.text_input("Type your message:", key="user_input", placeholder="Enter your message here...")
 
 if user_input:
-    # Construct the prompt
-    prompt = f":\n{user_input}"
-
     with st.spinner("Generating AI response..."):
-        ai_response = generate_text(prompt)  # Generate the AI response
+        ai_response = generate_text(user_input)  # Generate the AI response
 
     # Append the user input and AI response to the history
     st.session_state.history.append({"user": user_input, "ai": ai_response})
 
 # Display the chat history at the top
 if st.session_state.history:
-    last_chat = st.session_state.history[-1]  # Get the last chat
-    st.markdown(f"<div class='chat-container'><strong>You:</strong> {last_chat['user']}</div>", unsafe_allow_html=True)
-    st.markdown(f"<div class='chat-container'><strong>AI:</strong> {last_chat['ai']}</div>", unsafe_allow_html=True)
+    for chat in st.session_state.history:
+        st.markdown(f"<div class='chat-container'><strong>You:</strong> {chat['user']}</div>", unsafe_allow_html=True)
+        st.markdown(f"<div class='chat-container'><strong>AI:</strong> {chat['ai']}</div>", unsafe_allow_html=True)
