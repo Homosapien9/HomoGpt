@@ -42,10 +42,10 @@ st.markdown(
     """
     <style>
     .reportview-container {
-        background-color: #f0f0f5;  /* Light background for better readability */
+        background-color: #000000;  /* Light background for better readability */
     }
     .chat-container {
-        background-color: #ffffff;  /* White background for chat messages */
+        background-color: #000000;  /* White background for chat messages */
         border-radius: 10px;
         padding: 10px;
         margin-bottom: 10px;
