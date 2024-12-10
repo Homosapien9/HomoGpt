@@ -2,15 +2,20 @@ import streamlit as st
 import torch
 from transformers import GPTNeoForCausalLM, GPT2Tokenizer
 
+
 # Load GPT-Neo model and tokenizer
 @st.cache_resource
 def load_gpt_neo():
     model_name = "EleutherAI/gpt-neo-1.3B"
     tokenizer = GPT2Tokenizer.from_pretrained(model_name)
+    
+    # Define pad_token to avoid the padding error
+    tokenizer.pad_token = tokenizer.eos_token  # Set the pad_token to the eos_token
     model = GPTNeoForCausalLM.from_pretrained(model_name)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model.to(device)
     return model, tokenizer, device
+
 
 model, tokenizer, device = load_gpt_neo()
 
@@ -19,7 +24,7 @@ model, tokenizer, device = load_gpt_neo()
 def generate_text(prompt, max_length=150):
     # Tokenize input and move to device
     inputs = tokenizer(prompt, return_tensors="pt", padding=True, truncation=True)
-    
+
     # Move inputs to the correct device
     input_ids = inputs["input_ids"].to(device)
     attention_mask = inputs["attention_mask"].to(device)
@@ -32,7 +37,7 @@ def generate_text(prompt, max_length=150):
         num_return_sequences=1,
         no_repeat_ngram_size=2,
         temperature=0.7,
-        pad_token_id=tokenizer.eos_token_id,
+        pad_token_id=tokenizer.pad_token_id  # Set the pad_token_id to resolve the issue
     )
 
     # Decode and return response
@@ -41,11 +46,12 @@ def generate_text(prompt, max_length=150):
 
 
 # Streamlit Interface with Context Management
-st.title("AI Chatbot")
+st.title("Simple AI Chatbot Interface")
 
 # Initialize chat history in session state if it's not already initialized
 if "history" not in st.session_state:
     st.session_state.history = []
+
 
 # Function to display the full chat history in a user-readable format
 def display_chat():
