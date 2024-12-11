@@ -1,40 +1,31 @@
 import streamlit as st
 import torch
-from transformers import GPTNeoForCausalLM, GPT2Tokenizer, pipeline
-import requests
-from bs4 import BeautifulSoup
-from urllib.parse import quote
+from transformers import GPTNeoForCausalLM, GPT2Tokenizer
 import gc
 
-# Cached Resources for Efficient Loading
+# Load GPT-Neo with Streamlit caching
 @st.cache_resource
 def load_gpt_neo():
-    model_name = "EleutherAI/gpt-neo-125M"  # Smaller model for optimization
+    model_name = "EleutherAI/gpt-neo-125M"  # Smaller model for CPU usage
     tokenizer = GPT2Tokenizer.from_pretrained(model_name)
-    tokenizer.pad_token = tokenizer.eos_token
-    model = GPTNeoForCausalLM.from_pretrained(model_name).to(
-        "cuda" if torch.cuda.is_available() else "cpu"
-    )
-    return model, tokenizer
+    tokenizer.pad_token = tokenizer.eos_token  # Ensure pad_token is set
+    device = "cpu"  # Use CPU explicitly
+    model = GPTNeoForCausalLM.from_pretrained(model_name).to(device)
+    return model, tokenizer, device
 
-@st.cache_resource
-def load_summarizer():
-    return pipeline("summarization", model="sshleifer/distilbart-cnn-12-6")  # Lightweight summarization model
+# Initialize model and tokenizer
+gpt_neo_model, gpt_neo_tokenizer, device = load_gpt_neo()
 
-# Initialize Models
-gpt_neo_model, gpt_neo_tokenizer = load_gpt_neo()
-summarizer = load_summarizer()
-
-# Text Generation Function
+# Generate text function
 def generate_text(prompt, max_length=150):
     inputs = gpt_neo_tokenizer(
         prompt,
         return_tensors="pt",
         padding="max_length",
         truncation=True,
-        max_length=128  # Further reduce input size to save memory
-    ).to(gpt_neo_model.device)
-
+        max_length=128  # Limit input size for efficiency
+    ).to(device)
+    
     outputs = gpt_neo_model.generate(
         inputs["input_ids"],
         attention_mask=inputs["attention_mask"],
@@ -43,82 +34,31 @@ def generate_text(prompt, max_length=150):
         no_repeat_ngram_size=2,
         temperature=0.7,
         top_k=30,
-        top_p=0.8,
+        top_p=0.85,
         pad_token_id=gpt_neo_tokenizer.pad_token_id
     )
-
-    gc.collect()  # Clear unused memory
+    
+    gc.collect()  # Clean up unused memory
     return gpt_neo_tokenizer.decode(outputs[0], skip_special_tokens=True)[len(prompt):].strip()
 
-# Summarization Function
-def summarize_text(input_text, max_length=150):
-    input_text = input_text[:2000]  # Restrict input size for memory optimization
-    return summarizer(input_text, max_length=max_length, min_length=50, do_sample=False)[0]["summary_text"]
-
-# Web Search Function (DuckDuckGo)
-def live_web_search(query, max_results=3):
-    search_url = f"https://duckduckgo.com/html/?q={quote(query)}"
-    headers = {"User-Agent": "Mozilla/5.0"}
-    response = requests.get(search_url, headers=headers)
-    soup = BeautifulSoup(response.text, "html.parser")
-    results = []
-    for result in soup.find_all("a", class_="result__a")[:max_results]:
-        title = result.text
-        link = result["href"]
-        snippet = result.find_next("a", class_="result__snippet")
-        snippet_text = snippet.text if snippet else "No snippet available."
-        results.append({"title": title, "link": link, "snippet": snippet_text})
-    return results
-
-# Python Code Generation Function
-def generate_python_code(prompt):
-    code_prompt = f"Write Python code for the following task:\n{prompt}"
-    return generate_text(code_prompt, max_length=300)
-
 # Streamlit Interface
-st.title("Advanced AI Chatbot")
-st.markdown(
-    """
-    **Features:**
-    - Real-Time Web Search using DuckDuckGo
-    - AI-Powered Text Generation and Summarization
-    - Python Code Generation
-    """
-)
-
-# Session State Initialization
-if "history" not in st.session_state:
-    st.session_state["history"] = []
+st.title("GPT-Neo Powered AI Chatbot")
+st.markdown("Generate text and handle tasks efficiently using GPT-Neo on CPU.")
 
 # User Input
-user_input = st.text_area("Your question, command, or Python code task:")
+user_input = st.text_area("Enter your prompt:")
+
 if user_input:
     with st.spinner("Processing..."):
-        if "search" in user_input.lower():
-            st.subheader("Search Results")
-            for result in live_web_search(user_input):
-                st.markdown(f"**[{result['title']}]({result['link']})**")
-                st.write(result["snippet"])
-        elif "code" in user_input.lower():
-            st.subheader("Generated Python Code")
-            python_code = generate_python_code(user_input)
-            st.code(python_code, language="python")
-        else:
+        try:
             response = generate_text(user_input)
-            st.session_state["history"].append(f"User: {user_input}\nAI: {response}")
+            st.write("### AI Response")
             st.write(response)
+        except Exception as e:
+            st.error(f"An error occurred: {e}")
 
-# Conversation History
-if st.session_state["history"]:
-    st.subheader("Conversation History")
-    for entry in st.session_state["history"]:
-        st.markdown(entry)
-
-# Clear Chat
-if st.button("Clear Chat"):
-    st.session_state["history"] = []
+# Clear Cache Button
+if st.button("Clear Cache"):
+    st.cache_resource.clear()
     gc.collect()
-
-# Limit Conversation History Size
-if len(st.session_state["history"]) > 50:
-    st.session_state["history"] = st.session_state["history"][-50:]
+    st.success("Cache cleared!")
