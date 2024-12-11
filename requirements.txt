@@ -1,9 +1,5 @@
-wikipedia
 streamlit
-transformers
 torch
-PyPDF2
+transformers
 requests
 beautifulsoup4
-wikipedia-api
-lxml
