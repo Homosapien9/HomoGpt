@@ -4,11 +4,12 @@ from transformers import GPTNeoForCausalLM, GPT2Tokenizer, pipeline
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import quote
+import gc
 
 # Cached Resources for Efficient Loading
 @st.cache_resource
 def load_gpt_neo():
-    model_name = "EleutherAI/gpt-neo-1.3B"
+    model_name = "EleutherAI/gpt-neo-125M"  # Smaller model for optimization
     tokenizer = GPT2Tokenizer.from_pretrained(model_name)
     tokenizer.pad_token = tokenizer.eos_token
     model = GPTNeoForCausalLM.from_pretrained(model_name).to(
@@ -18,7 +19,7 @@ def load_gpt_neo():
 
 @st.cache_resource
 def load_summarizer():
-    return pipeline("summarization", model="facebook/bart-large-cnn")
+    return pipeline("summarization", model="sshleifer/distilbart-cnn-12-6")  # Lightweight summarization model
 
 # Initialize Models
 gpt_neo_model, gpt_neo_tokenizer = load_gpt_neo()
@@ -31,7 +32,7 @@ def generate_text(prompt, max_length=150):
         return_tensors="pt",
         padding="max_length",
         truncation=True,
-        max_length=256  # Reduce input size to save memory
+        max_length=128  # Further reduce input size to save memory
     ).to(gpt_neo_model.device)
 
     outputs = gpt_neo_model.generate(
@@ -46,11 +47,13 @@ def generate_text(prompt, max_length=150):
         pad_token_id=gpt_neo_tokenizer.pad_token_id
     )
 
+    gc.collect()  # Clear unused memory
     return gpt_neo_tokenizer.decode(outputs[0], skip_special_tokens=True)[len(prompt):].strip()
 
 # Summarization Function
 def summarize_text(input_text, max_length=150):
-    return summarizer(input_text[:1000], max_length=max_length, min_length=50, do_sample=False)[0]["summary_text"]
+    input_text = input_text[:2000]  # Restrict input size for memory optimization
+    return summarizer(input_text, max_length=max_length, min_length=50, do_sample=False)[0]["summary_text"]
 
 # Web Search Function (DuckDuckGo)
 def live_web_search(query, max_results=3):
@@ -114,3 +117,8 @@ if st.session_state["history"]:
 # Clear Chat
 if st.button("Clear Chat"):
     st.session_state["history"] = []
+    gc.collect()
+
+# Limit Conversation History Size
+if len(st.session_state["history"]) > 50:
+    st.session_state["history"] = st.session_state["history"][-50:]
