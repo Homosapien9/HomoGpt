@@ -1,96 +1,144 @@
 import streamlit as st
 import torch
-from transformers import GPTNeoForCausalLM, GPT2Tokenizer
+from transformers import GPTNeoForCausalLM, GPT2Tokenizer, pipeline
+from PyPDF2 import PdfReader
+import requests
+from bs4 import BeautifulSoup
+from urllib.parse import quote
 import wikipedia
 
 # Load GPT-Neo model and tokenizer
 @st.cache_resource
 def load_gpt_neo():
-    model_name = "EleutherAI/gpt-neo-1.3B"  # You can choose different sizes like 1.3B, 2.7B, or 125M
+    model_name = "EleutherAI/gpt-neo-1.3B"
     tokenizer = GPT2Tokenizer.from_pretrained(model_name)
-    tokenizer.pad_token = tokenizer.eos_token  # Handle padding token
+    tokenizer.pad_token = tokenizer.eos_token
     model = GPTNeoForCausalLM.from_pretrained(model_name)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model.to(device)
     return model, tokenizer, device
 
-model, tokenizer, device = load_gpt_neo()
+# Load summarization pipeline
+@st.cache_resource
+def load_summarizer():
+    return pipeline("summarization", model="facebook/bart-large-cnn")
 
-# Function to generate AI response based on user input
-def generate_text(user_input, max_length=150):
-    # Build conversation context (only user and AI prompts)
-    conversation_context = "\n".join(
-        [f"User: {msg['user']}\nAI: {msg['ai']}" for msg in st.session_state.history]
-    )
-    prompt = f"{conversation_context}\nUser: {user_input}\nAI:"
+gpt_neo_model, gpt_neo_tokenizer, device = load_gpt_neo()
+summarizer = load_summarizer()
 
-    # Tokenize input
-    inputs = tokenizer(prompt, return_tensors="pt", padding=True, truncation=True)
+# Function to generate text
+def generate_text(prompt, max_length=300):
+    inputs = gpt_neo_tokenizer(prompt, return_tensors="pt", padding=True, truncation=True)
     input_ids = inputs["input_ids"].to(device)
-    attention_mask = inputs["attention_mask"].to(device)
-
-    # Generate output
-    outputs = model.generate(
+    outputs = gpt_neo_model.generate(
         input_ids,
-        attention_mask=attention_mask,
-        max_length=max_length + len(input_ids[0]),  # Adjust max length
+        max_length=max_length + len(input_ids[0]),
         num_return_sequences=1,
-        no_repeat_ngram_size=2,  # Avoid repetitive n-grams
-        temperature=0.7,  # Creativity control
+        no_repeat_ngram_size=2,
+        temperature=0.7,
         top_k=50,
         top_p=0.9,
-        pad_token_id=tokenizer.pad_token_id
+        pad_token_id=gpt_neo_tokenizer.pad_token_id
     )
+    generated_text = gpt_neo_tokenizer.decode(outputs[0], skip_special_tokens=True)
+    return generated_text[len(prompt):].strip()
 
-    # Decode output
-    generated_text = tokenizer.decode(outputs[0], skip_special_tokens=True)
+# Function to summarize text
+def summarize_text(input_text, max_length=150):
+    return summarizer(input_text, max_length=max_length, min_length=50, do_sample=False)[0]["summary_text"]
 
-    # Extract AI response (after "AI:")
-    response_start = generated_text.find("AI:") + len("AI:")
-    return generated_text[response_start:].strip()
+# Advanced PDF Handling: Extract text and metadata
+def extract_text_from_pdf(uploaded_file):
+    reader = PdfReader(uploaded_file)
+    metadata = reader.metadata
+    text = ""
+    toc = reader.outline if hasattr(reader, 'outline') else None
+    for page in reader.pages:
+        text += page.extract_text()
+    return text, metadata, toc
 
-# Fetch Wikipedia information for a given query
-def get_wikipedia_info(query):
-    try:
-        # Fetch the summary of the query from Wikipedia
-        summary = wikipedia.summary(query, sentences=3)
-        return summary
-    except wikipedia.exceptions.DisambiguationError as e:
-        # In case of ambiguity, return a list of possible options
-        return f"There are multiple topics for '{query}'. Please be more specific."
-    except wikipedia.exceptions.HTTPTimeoutError:
-        return "Failed to fetch information from Wikipedia. Try again later."
+# Live Web Search using Google Search
+def live_web_search(query, max_results=3):
+    search_url = f"https://www.google.com/search?q={quote(query)}"
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
+    }
+    response = requests.get(search_url, headers=headers)
+    soup = BeautifulSoup(response.text, "html.parser")
+    results = []
+    for g in soup.find_all("div", class_="tF2Cxc")[:max_results]:
+        title = g.find("h3").text
+        link = g.find("a")["href"]
+        snippet = g.find("span", class_="aCOpRe").text if g.find("span", class_="aCOpRe") else "No snippet available."
+        results.append({"title": title, "link": link, "snippet": snippet})
+    return results
 
 # Streamlit Interface
-st.title("AI Chatbot")
-st.markdown("This is an advanced AI chatbot powered by GPT-Neo and Wikipedia.")
+st.title("Advanced AI Chatbot")
+st.markdown("""
+An enhanced AI assistant with:
+- Advanced PDF handling (text, metadata, table of contents)
+- Real-time web search capabilities
+""")
 
-# Initialize conversation history
+# Initialize session states
 if "history" not in st.session_state:
     st.session_state.history = []
 
-# User input for message
-user_input = st.text_input("Your message:", placeholder="Ask me anything...")
+if "pdf_content" not in st.session_state:
+    st.session_state.pdf_content = None
 
-# Process user input and generate AI response
+# File upload
+uploaded_file = st.file_uploader("Upload a PDF file:", type=["pdf"])
+
+if uploaded_file:
+    with st.spinner("Extracting PDF content..."):
+        extracted_text, pdf_metadata, pdf_toc = extract_text_from_pdf(uploaded_file)
+        st.session_state.pdf_content = extracted_text
+        st.subheader("PDF Metadata")
+        st.write(pdf_metadata)
+        if pdf_toc:
+            st.subheader("Table of Contents")
+            st.write(pdf_toc)
+    st.success("PDF content extracted!")
+
+# Display extracted content
+if st.session_state.pdf_content:
+    st.subheader("Extracted Text")
+    with st.expander("View Extracted Text"):
+        st.write(st.session_state.pdf_content)
+
+    st.subheader("Summarized Text")
+    with st.spinner("Summarizing extracted content..."):
+        summary = summarize_text(st.session_state.pdf_content)
+        st.write(summary)
+
+# User input for queries or tasks
+user_input = st.text_input("Your question or command:")
+
 if user_input:
-    if user_input.lower().startswith("who is") or user_input.lower().startswith("what is"):
-        # If the query is related to a fact, use Wikipedia
-        with st.spinner("Fetching information from Wikipedia..."):
-            wikipedia_info = get_wikipedia_info(user_input)
-            st.session_state.history.append({"user": user_input, "ai": wikipedia_info})
-    else:
-        # Otherwise, generate response using GPT-Neo
-        with st.spinner("Generating response..."):
-            ai_response = generate_text(user_input)  # Generate AI response
-            st.session_state.history.append({"user": user_input, "ai": ai_response})
+    with st.spinner("Processing..."):
+        if "search" in user_input.lower():
+            search_results = live_web_search(user_input)
+            st.subheader("Search Results")
+            for result in search_results:
+                st.markdown(f"**[{result['title']}]({result['link']})**")
+                st.write(result["snippet"])
+        elif st.session_state.pdf_content:
+            st.subheader("Answer Based on PDF Content")
+            st.write(generate_text(f"Answer this based on the content:\n{st.session_state.pdf_content}\n{user_input}"))
+        else:
+            response = generate_text(user_input)
+            st.session_state.history.append(f"User: {user_input}\nAI: {response}")
+            st.write(response)
 
-# Display chat history
+# Display conversation history
 if st.session_state.history:
-    for chat in st.session_state.history:
-        st.markdown(f"**User:** {chat['user']}")
-        st.markdown(f"**AI:** {chat['ai']}")
+    st.subheader("Conversation History")
+    for entry in st.session_state.history:
+        st.markdown(entry)
 
-# Clear chat history
+# Clear chat
 if st.button("Clear Chat"):
     st.session_state.history = []
+    st.session_state.pdf_content = None
