@@ -3,3 +3,4 @@ torch
 transformers
 requests
 beautifulsoup4
+gc
