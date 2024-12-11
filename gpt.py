@@ -31,7 +31,7 @@ def generate_text(prompt, max_length=150):
         return_tensors="pt",
         padding="max_length",
         truncation=True,
-        max_length=512
+        max_length=256  # Reduce input size to save memory
     ).to(gpt_neo_model.device)
 
     outputs = gpt_neo_model.generate(
@@ -50,7 +50,7 @@ def generate_text(prompt, max_length=150):
 
 # Summarization Function
 def summarize_text(input_text, max_length=150):
-    return summarizer(input_text, max_length=max_length, min_length=50, do_sample=False)[0]["summary_text"]
+    return summarizer(input_text[:1000], max_length=max_length, min_length=50, do_sample=False)[0]["summary_text"]
 
 # Web Search Function (DuckDuckGo)
 def live_web_search(query, max_results=3):
