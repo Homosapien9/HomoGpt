@@ -2,3 +2,8 @@ wikipedia
 streamlit
 transformers
 torch
+PyPDF2
+requests
+beautifulsoup4
+wikipedia-api
+lxml
