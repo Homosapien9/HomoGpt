@@ -12,7 +12,7 @@ import wikipedia
 def load_gpt_neo():
     model_name = "EleutherAI/gpt-neo-1.3B"
     tokenizer = GPT2Tokenizer.from_pretrained(model_name)
-    tokenizer.pad_token = tokenizer.eos_token
+    tokenizer.pad_token = tokenizer.eos_token  # Handle padding token
     model = GPTNeoForCausalLM.from_pretrained(model_name)
     device = "cuda" if torch.cuda.is_available() else "cpu"
     model.to(device)
@@ -27,19 +27,32 @@ gpt_neo_model, gpt_neo_tokenizer, device = load_gpt_neo()
 summarizer = load_summarizer()
 
 # Function to generate text
-def generate_text(prompt, max_length=300):
-    inputs = gpt_neo_tokenizer(prompt, return_tensors="pt", padding=True, truncation=True)
+def generate_text(prompt, max_length=150):
+    # Tokenize input with explicit padding and truncation
+    inputs = gpt_neo_tokenizer(
+        prompt,
+        return_tensors="pt",
+        padding="max_length",
+        truncation=True,
+        max_length=512  # Limit token length to reduce processing time
+    )
     input_ids = inputs["input_ids"].to(device)
+    attention_mask = inputs["attention_mask"].to(device)  # Explicit attention mask
+
+    # Generate text using model
     outputs = gpt_neo_model.generate(
         input_ids,
-        max_length=max_length + len(input_ids[0]),
+        attention_mask=attention_mask,  # Explicit attention mask for reliable results
+        max_length=max_length + len(input_ids[0]),  # Adjust output length
         num_return_sequences=1,
-        no_repeat_ngram_size=2,
-        temperature=0.7,
-        top_k=50,
-        top_p=0.9,
+        no_repeat_ngram_size=2,  # Avoid repetition
+        temperature=0.7,  # Control randomness
+        top_k=30,  # Reduce to speed up processing
+        top_p=0.8,  # Narrow down sampling for faster inference
         pad_token_id=gpt_neo_tokenizer.pad_token_id
     )
+
+    # Decode and extract AI response
     generated_text = gpt_neo_tokenizer.decode(outputs[0], skip_special_tokens=True)
     return generated_text[len(prompt):].strip()
 
