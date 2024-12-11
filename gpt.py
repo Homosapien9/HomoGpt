@@ -2,62 +2,52 @@ import streamlit as st
 import torch
 from transformers import GPTNeoForCausalLM, GPT2Tokenizer
 
-# Load GPT-Neo with Streamlit caching
+# Check if CUDA is available (GPU)
+device = "cuda" if torch.cuda.is_available() else "cpu"
+
+# Load GPT-Neo model and tokenizer with caching
 @st.cache_resource
 def load_gpt_neo():
-    model_name = "EleutherAI/gpt-neo-125M"  # Use smaller model for faster response times
+    model_name = "EleutherAI/gpt-neo-125M"  # Using a smaller model for CPU
     tokenizer = GPT2Tokenizer.from_pretrained(model_name)
-    tokenizer.pad_token = tokenizer.eos_token  # Ensure pad_token is set
-    device = "cpu"  # Use CPU explicitly
+    tokenizer.pad_token = tokenizer.eos_token  # Set pad_token to eos_token
+
+    # Load the model and send it to the correct device (CPU or GPU)
     model = GPTNeoForCausalLM.from_pretrained(model_name).to(device)
     return model, tokenizer, device
 
-# Initialize model and tokenizer
+# Initialize the model and tokenizer
 gpt_neo_model, gpt_neo_tokenizer, device = load_gpt_neo()
 
-# Create a memory cache for conversation history
-conversation_history = []
-
-# Generate text function with improved settings
+# Generate text function
 def generate_text(prompt, max_length=150):
-    # Add prompt to conversation history
-    conversation_history.append(f"User: {prompt}")
-    
-    # Prepare the input for the model, combining history for context
-    full_input = "\n".join(conversation_history)
-    
+    # Tokenize input
     inputs = gpt_neo_tokenizer(
-        full_input,
+        prompt,
         return_tensors="pt",
         padding="max_length",
         truncation=True,
-        max_length=512  # Increase context window
-    ).to(device)
-    
-    # Generate the response with parameters that simulate a more human-like style
+        max_length=128  # Input size limit for efficiency
+    ).to(device)  # Send input to correct device (GPU or CPU)
+
+    # Generate the output
     outputs = gpt_neo_model.generate(
         inputs["input_ids"],
         attention_mask=inputs["attention_mask"],
         max_length=max_length + inputs["input_ids"].shape[1],
         num_return_sequences=1,
         no_repeat_ngram_size=2,
-        temperature=0.9,  # Make responses more creative
-        top_k=50,  # Increase diversity of responses
-        top_p=0.9,  # Use nucleus sampling
-        pad_token_id=gpt_neo_tokenizer.pad_token_id,
-        eos_token_id=gpt_neo_tokenizer.eos_token_id
+        temperature=0.7,
+        top_k=30,
+        top_p=0.85,
+        pad_token_id=gpt_neo_tokenizer.pad_token_id
     )
     
-    response = gpt_neo_tokenizer.decode(outputs[0], skip_special_tokens=True)
-    
-    # Add the response to conversation history to keep the context
-    conversation_history.append(f"AI: {response.strip()}")
-    
-    return response.strip()
+    return gpt_neo_tokenizer.decode(outputs[0], skip_special_tokens=True)[len(prompt):].strip()
 
 # Streamlit Interface
 st.title("GPT-Neo Powered AI Chatbot")
-st.markdown("Generate text and handle tasks efficiently using GPT-Neo on CPU.")
+st.markdown("Generate text and handle tasks efficiently using GPT-Neo. This app uses GPU if available!")
 
 # User Input
 user_input = st.text_area("Enter your prompt:")
@@ -73,8 +63,5 @@ if user_input:
 
 # Clear Cache Button
 if st.button("Clear Cache"):
-    # Clear conversation history and Streamlit cache
-    global conversation_history
-    conversation_history = []
     st.cache_resource.clear()
     st.success("Cache cleared!")
