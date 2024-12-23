@@ -1,4 +1,10 @@
+requests
+numpy
+pandas
+xgboost
+yfinance
+Pillow
 streamlit
-torch==1.13.1
-transformers==4.31.0
-gc
+matplotlib
+plotly
+scikit-learn
