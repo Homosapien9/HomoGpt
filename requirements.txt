@@ -1,10 +1,4 @@
-requests
-numpy
-pandas
-xgboost
-yfinance
-Pillow
-streamlit
-matplotlib
-plotly
-scikit-learn
+transformers
+datetime
+torch
+random
